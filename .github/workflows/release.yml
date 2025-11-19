@@ -42,35 +42,16 @@ jobs:
           version: ${{ steps.get_version.outputs.version-without-v }}
           manifest: ${{ steps.set_manifest.outputs.manifest_url }}
           download: https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/bbmm.zip
-
-      # --- Build packs from committed _source -------------------------------
-
-      - name: Install Foundry CLI
-        run: npm i -D @foundryvtt/foundryvtt-cli
-
-      # Optional: fail fast if _source is missing or dupes exist
-      - name: Verify extracted packs (no dupes)
-        run: node _build/verify-extracted-packs.mjs
-
-      - name: Compile packs from _source
-        run: node _build/compile-all-packs.mjs
-
-      # Useful tree dump for debugging
-      - name: Show packs tree
-        run: |
-          echo "==== packs tree ===="
-          find packs -maxdepth 2 -type f -printf "%p (%k KB)\n" | sort
-
+     
       # --- Package & publish ------------------------------------------------
 
       - name: Create Module Archive
         run: |
           mkdir -p dist
           if [ -f LICENSE.md ]; then LIC="LICENSE.md"; else LIC="LICENSE"; fi
-          zip -r dist/bbmm.zip \
+          zip -r dist/pf2e-lock-pick.zip \
             module.json README.md "$LIC" CHANGELOG.md \
-            scripts/ packs/ styles/ lang/ assets/ \
-            -x "packs/*/_source/*"
+            scripts/ assets/
 
       - uses: release-flow/keep-a-changelog-action@v3
         id: changelog
@@ -88,7 +69,7 @@ jobs:
           prerelease: ${{ github.event.release.prerelease }}
           name: ${{ steps.get_version.outputs.version-without-v }}
           body: ${{ steps.changelog.outputs.release-notes }}
-          artifacts: "module.json, dist/bbmm.zip"
+          artifacts: "module.json, dist/pf2e-lock-pick.zip"
 
       - name: Publish Module to FoundryVTT Website
         id: publish-to-foundry-website
