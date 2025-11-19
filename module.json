@@ -1,0 +1,34 @@
+{
+  "id": "pf2e-lock-pick",
+  "title": "PF2e Lock-Pick+",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13"
+  },
+  "authors": [
+    {
+      "name": "TheJoester",
+      "url": "https://github.com/thejoester",
+      "discord": "thejoester",
+      "flags": {}
+    }
+  ],
+  "flags": {
+    "canUpload": true
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "pf2e",
+        "type": "system",
+        "compatibility": {}
+      }
+    ]
+  },
+  "description": "Module to automate PF2e Pick a Lock activity.",
+  "socket": true,
+  "esmodules": [
+    "scripts/main.js"
+  ]
+}
