@@ -26,9 +26,10 @@ When GM Launches, setup UI
 <img width="602" height="272" alt="image" src="https://github.com/user-attachments/assets/7d81f117-aa6b-414e-9da9-062629849d16" />
 
 
-GM View (UI will be improved)
+GM View
 
-<img width="602" height="347" alt="image" src="https://github.com/user-attachments/assets/7a4bb863-2ae3-48ed-ade1-bd16adc8fd8e" />
+<img width="602" height="347" alt="image" src="https://github.com/user-attachments/assets/100d846b-03d3-4b73-8f4c-82f357d899ad" />
+
 
 
 Player View
