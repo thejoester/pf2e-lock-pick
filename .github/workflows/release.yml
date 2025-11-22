@@ -41,7 +41,7 @@ jobs:
         env:
           version: ${{ steps.get_version.outputs.version-without-v }}
           manifest: ${{ steps.set_manifest.outputs.manifest_url }}
-          download: https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/bbmm.zip
+          download: https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/pf2e-lock-pick.zip
      
       # --- Package & publish ------------------------------------------------
 
