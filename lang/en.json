@@ -37,6 +37,11 @@
         "inProgress": "There is already an active Lock-Pick challenge in progress",
         "existingOrNew": "Do you want to reopen an existing challenge or start a new one",
         "openExisting": "Open existing",
-        "startNew": "Start new"
+        "startNew": "Start new",
+        "broken": "broken",
+        "selectToRestore": "Select a toolkit or replacement picks to restore",
+        "titleRestorePickTool": "Restore Pick/Toolkit",
+        "restore": "Restore",
+        "gmAdjust": "GM Adjust"
     }
 }

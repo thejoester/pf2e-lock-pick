@@ -325,13 +325,13 @@ class LockPickChallengeApp extends ApplicationV2 {
 			: `<span data-success-count>${data.successCount}</span>`;
 		
 		const gmControlsRow = data.isGMView
-			? `<div class="lp-row lp-gm-controls">
-					<label>GM Adjust:</label>
-					<div class="lp-gm-buttons">
-						<button type="button" data-action="gmDecSuccess" class="lp-gm-btn">-</button>
-						<button type="button" data-action="gmIncSuccess" class="lp-gm-btn">+</button>
-						<button type="button" data-action="gmRestorePickToolkit" class="lp-gm-btn">${LT.restorePickToolkit()}</button>
-					</div>
+			? `<div class="lp-row lp-gm-controls" style="display:flex; align-items:center; gap:0.5rem;">
+					<label style="margin-right:0.5rem;">${LT.gmAdjust()}:</label>
+					<button type="button" data-action="gmDecSuccess" class="lp-gm-btn" style="flex:0 0 auto; width:auto;">-</button>
+					<button type="button" data-action="gmIncSuccess" class="lp-gm-btn" style="flex:0 0 auto; width:auto;">+</button>
+				</div>
+				<div class="lp-row lp-gm-controls">
+					<button type="button" data-action="gmRestorePickToolkit" class="lp-gm-btn">${LT.restorePickToolkit()}</button>
 				</div>`
 			: "";
 
@@ -624,16 +624,22 @@ class LockPickChallengeApp extends ApplicationV2 {
         }
 
         const select = root.querySelector('[data-tool-select]');
-        const selectedToolkitId = select?.value || null;
-        debugLog("LockPickChallengeApp::_onClickPickLock – selected toolkit", {
-            selectedToolkitId,
-            rawValue: select?.value
-        });
+		const selectedToolkitId = select?.value || null;
+		debugLog("LockPickChallengeApp::_onClickPickLock – selected toolkit", {
+			selectedToolkitId,
+			rawValue: select?.value
+		});
 
-        if (!selectedToolkitId) {
-            debugLog("LockPickChallengeApp::_onClickPickLock – no toolkit selected, aborting roll");
-            return;
-        }
+		// Persist the current selection onto the shared challenge so it survives re-renders
+		if (selectedToolkitId) {
+			challenge.toolSelection = selectedToolkitId;
+			LockPickChallengeManager.challenges.set(challenge.id, challenge);
+		}
+
+		if (!selectedToolkitId) {
+			debugLog("LockPickChallengeApp::_onClickPickLock – no toolkit selected, aborting roll");
+			return;
+		}
 
         let rollResult;
         try {
@@ -755,6 +761,27 @@ function applyLockPickResult(challenge, degree) {
 	if (challenge.successCount < 0) challenge.successCount = 0;
 }
 
+// Mapping of tool slugs to their corresponding replacement pick slugs
+const TOOL_TO_REPLACEMENT_SLUGS = {
+	"thieves-toolkit": [
+		"thieves-toolkit-replacement-picks",
+		"replacement-picks"
+	],
+	"thieves-tools": [
+		"thieves-toolkit-replacement-picks",
+		"replacement-picks"
+	],
+	"thieves-toolkit-infiltrator": [
+		"thieves-toolkit-infiltrator-picks"
+	],
+	"thieves-tools-infiltrator": [
+		"thieves-toolkit-infiltrator-picks"
+	],
+	"thieves-tools-concealable": [
+		"thieves-tools-concealable-picks"
+	]
+};
+
 // Helper: get all thieves' tools and replacement picks for an actor
 function getThievesToolsData(actor) {
 	// Actual slugs from PF2e Remaster + Otari variant
@@ -784,8 +811,8 @@ function getThievesToolsData(actor) {
 	);
 
 	// Broken vs non-broken toolkits are now determined by name suffix, NOT flags
-	const toolsBroken = allTools.filter(i => i.name?.includes(" (broken)"));
-	const toolsNonBroken = allTools.filter(i => !i.name?.includes(" (broken)"));
+	const toolsBroken = allTools.filter(i => i.name?.includes(` (${LT.broken()})`));
+	const toolsNonBroken = allTools.filter(i => !i.name?.includes(` (${LT.broken()})`));
 
 	const totalNonBrokenTools = toolsNonBroken.reduce((n, i) => {
 		const qty = i.system?.quantity ?? 1;
@@ -814,8 +841,31 @@ function getThievesToolsData(actor) {
 async function handleCriticalFailure(actor, selectedToolkitId) {
 	const toolsData = getThievesToolsData(actor);
 
-	// First, try to consume a replacement pick if any exist
-	const replacement = toolsData.allReplacements.find(i => (i.system?.quantity ?? 1) > 0);
+	// Resolve the toolkit being used (if any)
+	const toolkit = selectedToolkitId ? actor.items.get(selectedToolkitId) ?? null : null;
+	const toolkitSlug = toolkit ? (toolkit.slug ?? toolkit.system?.slug ?? "") : "";
+
+	// Determine which replacement slugs are appropriate for this toolkit
+	let preferredReplacementSlugs = [];
+	if (toolkitSlug && Object.prototype.hasOwnProperty.call(TOOL_TO_REPLACEMENT_SLUGS, toolkitSlug)) {
+		preferredReplacementSlugs = TOOL_TO_REPLACEMENT_SLUGS[toolkitSlug];
+	}
+
+	// First, try to consume a replacement pick that matches the selected toolkit, if any
+	let replacement = null;
+	if (preferredReplacementSlugs.length) {
+		replacement = toolsData.allReplacements.find(i => {
+			const slug = i.slug ?? i.system?.slug ?? "";
+			const qty = i.system?.quantity ?? 1;
+			return qty > 0 && preferredReplacementSlugs.includes(slug);
+		});
+	}
+
+	// Fallback: if we couldn't match a specific type, use any replacement picks as before
+	if (!replacement) {
+		replacement = toolsData.allReplacements.find(i => (i.system?.quantity ?? 1) > 0);
+	}
+
 	if (replacement) {
 		const qty = replacement.system?.quantity ?? 1;
 		const newQty = qty - 1;
@@ -826,24 +876,23 @@ async function handleCriticalFailure(actor, selectedToolkitId) {
 			await replacement.delete();
 		}
 
-		debugLog("Consumed one replacement pick on crit failure", replacement);
+		debugLog("Consumed one replacement pick on crit failure", {
+			itemId: replacement.id,
+			name: replacement.name,
+			toolkitSlug,
+			replacementSlug: replacement.slug ?? replacement.system?.slug
+		});
 		return;
 	}
 
 	// No replacement picks left; break a toolkit instead
-	if (!selectedToolkitId) {
-		debugLog("handleCriticalFailure: no selected toolkit id to break");
-		return;
-	}
-
-	const toolkit = actor.items.get(selectedToolkitId);
 	if (!toolkit) {
-		debugLog("handleCriticalFailure: selected toolkit not found on actor", { selectedToolkitId });
+		debugLog("handleCriticalFailure: no toolkit to break (selectedToolkitId missing or not found)", { selectedToolkitId });
 		return;
 	}
 
 	const qty = toolkit.system?.quantity ?? 1;
-	const brokenName = toolkit.name?.includes(" (broken)") ? toolkit.name : `${toolkit.name} (broken)`;
+	const brokenName = toolkit.name?.includes(` (${LT.broken()})`) ? toolkit.name : `${toolkit.name} (${LT.broken()})`;
 
 	if (qty > 1) {
 		// Split the stack: reduce the main stack by 1, create a separate broken toolkit with quantity 1
@@ -863,31 +912,110 @@ async function handleCriticalFailure(actor, selectedToolkitId) {
 	}
 }
 
-// Helper: best-effort restore a pick or toolkit (GM manual fix after reroll, etc.)
+// GM helper: prompt which pick/toolkit to restore and apply the fix
 async function restorePickOrToolkit(actor) {
 	const toolsData = getThievesToolsData(actor);
 
-	// First, try to un-break a toolkit (reverse the "(broken)" rename)
-	const brokenToolkit = toolsData.toolsBroken[0];
-	if (brokenToolkit) {
-		const originalName = brokenToolkit.name?.replace(" (broken)", "") ?? brokenToolkit.name;
-		await brokenToolkit.update({ name: originalName });
-		debugLog("Restored broken toolkit to usable state", { toolkitId: brokenToolkit.id, originalName });
+	const options = [];
+
+	// Broken toolkits first
+	for (const item of toolsData.toolsBroken) {
+		const rawName = item.name || item.slug || item.system?.slug || "???";
+		options.push({
+			type: "toolkit",
+			id: item.id,
+			label: rawName
+		});
+	}
+
+	// All replacement pick stacks
+	for (const item of toolsData.allReplacements) {
+		const qty = item.system?.quantity ?? 0;
+		const rawName = item.name || item.slug || item.system?.slug || "???";
+		const label = `${rawName} (x${qty})`;
+		options.push({
+			type: "replacement",
+			id: item.id,
+			label
+		});
+	}
+
+	if (!options.length) {
+		debugLog("restorePickOrToolkit: no broken toolkits or replacement picks found to restore");
 		return;
 	}
 
-	// Next, if no broken toolkits, try to restore a replacement pick by increasing quantity
-	const replacement = toolsData.allReplacements[0];
-	if (replacement) {
-		const qty = replacement.system?.quantity ?? 1;
-		const newQty = qty + 1;
-		await replacement.update({ "system.quantity": newQty });
-		debugLog("Restored one replacement pick on actor", { itemId: replacement.id, newQty });
-		return;
-	}
+	const radioRows = options.map((opt, idx) => {
+		const checked = idx === 0 ? " checked" : "";
+		return `
+			<div class="form-group">
+				<label>
+					<input type="radio" name="restoreTarget" value="${opt.type}:${opt.id}"${checked} />
+					${foundry.utils.escapeHTML(opt.label)}
+				</label>
+			</div>
+		`;
+	}).join("");
 
-	// Nothing to restore – log and bail
-	debugLog("restorePickOrToolkit: no broken toolkits or replacement picks found to restore");
+	const html = `
+		<p>${LT.selectToRestore()}:</p>
+		<form>
+			${radioRows}
+		</form>
+	`;
+
+	const dialog = new DialogV2({
+		window: {
+			title: LT.titleRestorePickTool()
+		},
+		content: html,
+		buttons: [
+			{
+				label: LT.restore(),
+				action: "restore",
+				icon: "fa-solid fa-undo",
+				callback: async (event, button) => {
+					const form = button.form;
+					if (!form) {
+						debugLog("restorePickOrToolkit: no form found on dialog button");
+						return;
+					}
+
+					const value = form.elements.restoreTarget?.value;
+					if (!value) {
+						debugLog("restorePickOrToolkit: no restoreTarget value selected");
+						return;
+					}
+
+					const [type, id] = value.split(":");
+					const item = actor.items.get(id);
+					if (!item) {
+						debugLog("restorePickOrToolkit: selected item not found on actor", { type, id });
+						return;
+					}
+
+					if (type === "toolkit") {
+						const name = item.name ?? "";
+						const restoredName = name.includes(` (${LT.broken()})`) ? name.replace(` (${LT.broken()})`, "") : name;
+						await item.update({ name: restoredName });
+						debugLog("restorePickOrToolkit: restored broken toolkit", { itemId: id, restoredName });
+					} else if (type === "replacement") {
+						const qty = item.system?.quantity ?? 0;
+						const newQty = qty + 1;
+						await item.update({ "system.quantity": newQty });
+						debugLog("restorePickOrToolkit: restored one replacement pick", { itemId: id, newQty });
+					}
+				}
+			},
+			{
+				label: LT.cancel(),
+				action: "cancel"
+			}
+		],
+		default: "restore"
+	});
+
+	dialog.render(true);
 }
 
 //  Helper: post chat message for a lock-pick attempt
