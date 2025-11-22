@@ -1,12 +1,114 @@
-const MODULE_ID = "pf2e-lock-pick";
+import { LT } from "./localization.js";
+
+export const MODULE_ID = "pf2e-lock-pick";
+
 
 const { ApplicationV2, DialogV2 } = foundry.applications.api;
 
+Hooks.once("init", () => {
+	game.settings.register(MODULE_ID, "debugLevel", {
+		name: "Debug Level",
+		hint: "Set the debug level for console logging from the PF2e Lock-Pick module.",
+		scope: "world",
+		config: false,
+		type: String,
+		choices: {
+			"none": "None",
+			"error": "Error",
+			"warn": "Warn",
+			"all": "All"
+		},
+		default: "none"
+	});
+});
+
+/*
 function debugLog(...args) {
 	try {
 		console.log(`${MODULE_ID} |`, ...args);
 	} catch (e) {
 		// noop
+	}
+}
+*/
+export function debugLog(intLogType, stringLogMsg, objObject = null) {
+	
+	// Get Timestamps
+	const now = new Date();
+	const timestamp = now.toTimeString().split(' ')[0]; // "HH:MM:SS"
+	
+	// Handle the case where the first argument is a string
+	if (typeof intLogType === "string") {
+		objObject = stringLogMsg; // Shift arguments
+		stringLogMsg = intLogType;
+		intLogType = 1; // Default log type to 'all'
+	}
+	let debugLevel = "all"; // default until setting exists
+	try {
+		// Only read after it’s registered
+		if (game?.settings?.settings?.has?.(`${MODULE_ID}.debugLevel`)) {
+			debugLevel = game.settings.get(MODULE_ID, "debugLevel");
+		}
+	} catch (e) {
+		// Swallow: setting not registered yet
+	}
+
+	// Map debugLevel setting to numeric value for comparison
+	const levelMap = {
+		"none": 4,
+		"error": 3,
+		"warn": 2,
+		"all": 1
+	};
+
+	const currentLevel = levelMap[debugLevel] || 4; // Default to 'none' if debugLevel is undefined
+
+	// Check if the log type should be logged based on the current debug level
+	if (intLogType < currentLevel) return;
+
+	// Capture stack trace to get file and line number
+	const stack = new Error().stack.split("\n");
+	let fileInfo = "";
+	for (let i = 2; i < stack.length; i++) {
+		const line = stack[i].trim();
+		const fileInfoMatch = line.match(/(\/[^)]+):(\d+):(\d+)/); // Match file path and line number
+		if (fileInfoMatch) {
+			const [, filePath, lineNumber] = fileInfoMatch;
+			const fileName = filePath.split("/").pop(); // Extract just the file name
+		}
+	}
+
+	// Prepend the file and line info to the log message
+	const formattedLogMsg = `${stringLogMsg}`;
+	
+	if (objObject) {
+		switch (intLogType) {
+			case 1: // Info/Log (all)
+				console.log(`%Lock-Pick+ [${timestamp}] | ${formattedLogMsg}`, "color: purple; font-weight: bold;", objObject);
+				break;
+			case 2: // Warning
+				console.log(`%Lock-Pick+ [${timestamp}] | WARNING: ${formattedLogMsg}`, "color: orange; font-weight: bold;", objObject);
+				break;
+			case 3: // Critical/Error
+				console.log(`%Lock-Pick+ [${timestamp}] | ERROR: ${formattedLogMsg}`, "color: red; font-weight: bold;", objObject);
+				break;
+			default:
+				console.log(`%Lock-Pick+ [${timestamp}] | ${formattedLogMsg}`, "color: purple; font-weight: bold;", objObject);
+		}
+	} else {
+		switch (intLogType) {
+			case 1: // Info/Log (all)
+				console.log(`%Lock-Pick+ [${timestamp}] | ${formattedLogMsg}`, "color: purple; font-weight: bold;");
+				break;
+			case 2: // Warning
+				console.log(`%Lock-Pick+ [${timestamp}] | WARNING: ${formattedLogMsg}`, "color: orange; font-weight: bold;");
+				break;
+			case 3: // Critical/Error
+				console.log(`%Lock-Pick+ [${timestamp}] | ERROR: ${formattedLogMsg}`, "color: red; font-weight: bold;");
+				break;
+			default:
+				console.log(`%Lock-Pick+ [${timestamp}] | ${formattedLogMsg}`, "color: purple; font-weight: bold;");
+		}
 	}
 }
 
@@ -42,17 +144,28 @@ class LockPickChallengeApp extends ApplicationV2 {
 	static DEFAULT_OPTIONS = {
 		...ApplicationV2.DEFAULT_OPTIONS,
 		id: `${MODULE_ID}-challenge`,
-		title: "Lock-Pick Challenge",
+		title: LT.titleLPC(),
 		position: {
 			width: 600,
 			height: "auto"
 		},
 		window: {
 			frame: true,
-			titleBar: true
+			titleBar: true,
+			controls: [
+				{
+					icon: "fa-solid fa-eye",
+					label: LT.showToPlayer(),
+					action: "showToPlayer"
+				}
+			]
 		},
 		actions: {
-			pickLock: LockPickChallengeApp.pickLock
+			pickLock: LockPickChallengeApp.pickLock,
+			gmIncSuccess: LockPickChallengeApp.gmIncSuccess,
+			gmDecSuccess: LockPickChallengeApp.gmDecSuccess,
+			gmRestorePickToolkit: LockPickChallengeApp.gmRestorePickToolkit,
+			showToPlayer: LockPickChallengeApp.showToPlayer
 		}
 	};
 
@@ -101,7 +214,7 @@ class LockPickChallengeApp extends ApplicationV2 {
 	}
 
 	get title() {
-		return game.i18n.localize("Lock-Pick Challenge");
+		return LT.titleLPC();
 	}
 
 	static async openForUsers(challenge) {
@@ -131,7 +244,7 @@ class LockPickChallengeApp extends ApplicationV2 {
         if (!actor) {
             debugLog("Actor not found for challenge", challenge);
             return {
-                actorName: "<Missing Actor>",
+                actorName: `<${LT.missingActor()}>`,
                 isGMView: this.isGMView,
                 successCount: challenge.successCount,
                 requiredAttempts: challenge.requiredAttempts,
@@ -195,14 +308,14 @@ class LockPickChallengeApp extends ApplicationV2 {
 
 		const dcRow = data.isGMView
 			? `<div class="lp-row">
-					<label>DC:</label>
+					<label>${LT.DC()}:</label>
 					<span data-lock-dc>${data.dc}</span>
 				</div>`
 			: "";
 
 		const requiredRow = data.isGMView
 			? `<div class="lp-row">
-					<label>Required Successes:</label>
+					<label>${LT.reqSuccesses()}:</label>
 					<span data-required-attempts>${data.requiredAttempts}</span>
 				</div>`
 			: "";
@@ -210,8 +323,19 @@ class LockPickChallengeApp extends ApplicationV2 {
 		const successesLabel = data.isGMView
 			? `<span data-success-count>${data.successCount}</span> / <span data-required-attempts>${data.requiredAttempts}</span>`
 			: `<span data-success-count>${data.successCount}</span>`;
+		
+		const gmControlsRow = data.isGMView
+			? `<div class="lp-row lp-gm-controls">
+					<label>GM Adjust:</label>
+					<div class="lp-gm-buttons">
+						<button type="button" data-action="gmDecSuccess" class="lp-gm-btn">-</button>
+						<button type="button" data-action="gmIncSuccess" class="lp-gm-btn">+</button>
+						<button type="button" data-action="gmRestorePickToolkit" class="lp-gm-btn">${LT.restorePickToolkit()}</button>
+					</div>
+				</div>`
+			: "";
 
-		const buttonLabel = data.isUnlocked ? "Close" : "Pick Lock";
+		const buttonLabel = data.isUnlocked ? LT.close() : LT.pickLock();
         const canClickButton = data.isUnlocked || data.canAttempt;
         const buttonDisabled = canClickButton ? "" : "disabled";
 
@@ -226,28 +350,28 @@ class LockPickChallengeApp extends ApplicationV2 {
 			</div>
 			<div class="lp-controls flexcol" style="margin-left: 1rem; align-items: flex-start;">
 				<div class="lp-row">
-					<label>Character:</label>
+					<label>${LT.character()}:</label>
 					<span data-actor-name>${foundry.utils.escapeHTML(data.actorName)}</span>
 				</div>
 				${dcRow}
 				${requiredRow}
 				<div class="lp-row">
-					<label>Successes:</label>
+					<label>${LT.successes()}:</label>
 					${successesLabel}
 				</div>
+				${gmControlsRow}
 				<div class="lp-row">
-					<label>Remaining Picks:</label>
+					<label>${LT.remainingPicks()}:</label>
 					<span data-remaining-picks>${data.remainingPicks}</span>
 				</div>
 				<div class="lp-row">
-					<label>Toolkit:</label>
+					<label>${LT.toolkit()}:</label>
 					<select name="toolSelection" data-tool-select>
 						${toolOptionsHtml}
 					</select>
 				</div>
 				<div class="lp-row lp-button-row">
 					<button type="button" data-action="pickLock" class="lp-pick-button" style="padding: 0.5rem 1.5rem; font-size: 1.1rem;" ${buttonDisabled}>${buttonLabel}</button>
-
 				</div>
 			</div>
 		`;
@@ -267,13 +391,150 @@ class LockPickChallengeApp extends ApplicationV2 {
 		}
 	}
 
-    // ApplicationV2 action handler for data-action="pickLock"
+    // Pick Lock button handler
 	static async pickLock(event, target) {
 		event?.preventDefault?.();
 
 		if (!this || !(this instanceof LockPickChallengeApp)) return;
 
 		await this._onClickPickLock();
+	}
+
+	// Header control: GM can re-show the challenge to the player
+	static async showToPlayer(event, target) {
+		event?.preventDefault?.();
+
+		if (!this || !(this instanceof LockPickChallengeApp)) return;
+
+		if (!game.user.isGM) {
+			debugLog("LockPickChallengeApp::showToPlayer – non-GM attempted Show to player");
+			return;
+		}
+
+		await this._updateChallengeRef();
+		const challenge = this.challenge;
+		if (!challenge) {
+			debugLog("LockPickChallengeApp::showToPlayer – no challenge found to broadcast");
+			return;
+		}
+
+		debugLog("LockPickChallengeApp::showToPlayer – broadcasting openChallenge to player", { challengeId: challenge.id });
+
+		game.socket.emit(`module.${MODULE_ID}`, {
+			type: "openChallenge",
+			payload: {
+				challenge
+			}
+		});
+	}
+
+	// GM: increase success count by 1 (up to requiredAttempts)
+	static async gmIncSuccess(event, target) {
+		event?.preventDefault?.();
+
+		if (!this || !(this instanceof LockPickChallengeApp)) return;
+		if (!game.user.isGM) {
+			debugLog("gmIncSuccess called by non-GM user, ignoring");
+			return;
+		}
+
+		await this._updateChallengeRef();
+		const challenge = this.challenge;
+		if (!challenge) {
+			debugLog("gmIncSuccess – no challenge found");
+			return;
+		}
+
+		const current = challenge.successCount ?? 0;
+		const max = challenge.requiredAttempts ?? current;
+		challenge.successCount = Math.min(max, current + 1);
+
+		LockPickChallengeManager.challenges.set(challenge.id, challenge);
+
+		try {
+			game.socket.emit(`module.${MODULE_ID}`, {
+				type: "updateChallenge",
+				payload: { challenge }
+			});
+		} catch (err) {
+			debugLog("gmIncSuccess – failed to emit updateChallenge", err);
+		}
+
+		this.render(true);
+	}
+
+	// GM: decrease success count by 1 (down to 0)
+	static async gmDecSuccess(event, target) {
+		event?.preventDefault?.();
+
+		if (!this || !(this instanceof LockPickChallengeApp)) return;
+		if (!game.user.isGM) {
+			debugLog("gmDecSuccess called by non-GM user, ignoring");
+			return;
+		}
+
+		await this._updateChallengeRef();
+		const challenge = this.challenge;
+		if (!challenge) {
+			debugLog("gmDecSuccess – no challenge found");
+			return;
+		}
+
+		const current = challenge.successCount ?? 0;
+		challenge.successCount = Math.max(0, current - 1);
+
+		LockPickChallengeManager.challenges.set(challenge.id, challenge);
+
+		try {
+			game.socket.emit(`module.${MODULE_ID}`, {
+				type: "updateChallenge",
+				payload: { challenge }
+			});
+		} catch (err) {
+			debugLog("gmDecSuccess – failed to emit updateChallenge", err);
+		}
+
+		this.render(true);
+	}
+
+	// GM: restore a pick or toolkit after a crit fail (best-effort undo)
+	static async gmRestorePickToolkit(event, target) {
+		event?.preventDefault?.();
+
+		if (!this || !(this instanceof LockPickChallengeApp)) return;
+		if (!game.user.isGM) {
+			debugLog("gmRestorePickToolkit called by non-GM user, ignoring");
+			return;
+		}
+
+		await this._updateChallengeRef();
+		const challenge = this.challenge;
+		if (!challenge) {
+			debugLog("gmRestorePickToolkit – no challenge found");
+			return;
+		}
+
+		const actor = await fromUuid(challenge.actorUuid);
+		if (!actor) {
+			debugLog("gmRestorePickToolkit – actor not found for challenge", { challenge });
+			return;
+		}
+
+		await restorePickOrToolkit(actor);
+
+		// Challenge itself doesn't change, but we still broadcast so other clients re-render
+		LockPickChallengeManager.challenges.set(challenge.id, challenge);
+
+		try {
+			game.socket.emit(`module.${MODULE_ID}`, {
+				type: "updateChallenge",
+				payload: { challenge }
+			});
+		} catch (err) {
+			debugLog("gmRestorePickToolkit – failed to emit updateChallenge", err);
+		}
+
+		this.render(true);
 	}
 
 	/** @override */
@@ -341,6 +602,8 @@ class LockPickChallengeApp extends ApplicationV2 {
         const isUnlocked = challenge.successCount >= challenge.requiredAttempts;
         if (isUnlocked) {
             debugLog("LockPickChallengeApp::_onClickPickLock – challenge already unlocked, closing");
+			// End this lock-pick session now that the lock has been picked
+			LockPickChallengeManager.endChallenge(challenge.id);
             this.close();
             return;
         }
@@ -457,13 +720,13 @@ function randomIDBase(length) {
 function postLockPickedChatMessage(actor) {
 	const escapedName = foundry.utils.escapeHTML(actor.name);
 	const content = `
-		<p><strong>${escapedName}</strong> successfully picks the lock.</p>
+		<p><strong>${escapedName}</strong> ${LT.successLockPick()}.</p>
 	`;
 
 	ChatMessage.create({
 		speaker: ChatMessage.getSpeaker({ actor }),
 		content,
-		whisper: [] // or set to [game.user.id] if you ever want GM-only
+		whisper: [] 
 	});
 }
 
@@ -498,12 +761,16 @@ function getThievesToolsData(actor) {
 	const TOOL_SLUGS = [
 		"thieves-toolkit",            // Standard thieves' toolkit
 		"thieves-tools",              // Legacy/compat
-		"thieves-tools-infiltrator"   // Otari's Thieves' Tools
+		"thieves-toolkit-infiltrator",
+		"thieves-tools-infiltrator",   
+		"thieves-tools-concealable"
 	];
 
 	const REPLACEMENT_SLUGS = [
 		"thieves-toolkit-replacement-picks", // Remaster replacement picks
-		"replacement-picks"                  // Legacy/compat
+		"replacement-picks",                  // Legacy/compat
+		"thieves-toolkit-infiltrator-picks",
+		"thieves-tools-concealable-picks"
 	];
 
 	const allTools = actor.items.filter(i =>
@@ -596,34 +863,61 @@ async function handleCriticalFailure(actor, selectedToolkitId) {
 	}
 }
 
+// Helper: best-effort restore a pick or toolkit (GM manual fix after reroll, etc.)
+async function restorePickOrToolkit(actor) {
+	const toolsData = getThievesToolsData(actor);
+
+	// First, try to un-break a toolkit (reverse the "(broken)" rename)
+	const brokenToolkit = toolsData.toolsBroken[0];
+	if (brokenToolkit) {
+		const originalName = brokenToolkit.name?.replace(" (broken)", "") ?? brokenToolkit.name;
+		await brokenToolkit.update({ name: originalName });
+		debugLog("Restored broken toolkit to usable state", { toolkitId: brokenToolkit.id, originalName });
+		return;
+	}
+
+	// Next, if no broken toolkits, try to restore a replacement pick by increasing quantity
+	const replacement = toolsData.allReplacements[0];
+	if (replacement) {
+		const qty = replacement.system?.quantity ?? 1;
+		const newQty = qty + 1;
+		await replacement.update({ "system.quantity": newQty });
+		debugLog("Restored one replacement pick on actor", { itemId: replacement.id, newQty });
+		return;
+	}
+
+	// Nothing to restore – log and bail
+	debugLog("restorePickOrToolkit: no broken toolkits or replacement picks found to restore");
+}
+
 //  Helper: post chat message for a lock-pick attempt
 function postLockPickChatMessage(actor, rollResult) {
 	const dsText = {
-		criticalSuccess: "Critical Success",
-		success: "Success",
-		failure: "Failure",
-		criticalFailure: "Critical Failure"
+		criticalSuccess: LT.criticalSuccess(),
+		success: LT.success(),
+		failure: LT.failure(),
+		criticalFailure: LT.failure()
 	}[rollResult.degree] ?? rollResult.degree;
 
 
 
 	const escapedName = foundry.utils.escapeHTML(actor.name);
 	let content = `
-		<p><strong>${escapedName}</strong> attempts to pick the lock.</p>
-		<p>Result: <strong>${dsText}</strong>.</p>
+		<p><strong>${escapedName}</strong> ${LT.attemptLockPick()}.</p>
+		<p>${LT.result()}: <strong>${dsText}</strong>.</p>
 	`;
 
     // If critical falure, show pick destroyed message
     if (rollResult.degree === "criticalFailure") {
 		content += `
-		<p>Lock pick destroyed.</p>
+		<p>${LT.lockPickDestroyed()}.</p>
 		`;
 	}
     
 	ChatMessage.create({
 		speaker: ChatMessage.getSpeaker({ actor }),
 		content,
-		whisper: [] // leave empty so everyone sees *result* but not the DC
+		whisper: []
 	});
 }
 
@@ -644,8 +938,8 @@ async function rollThieveryCheck(actor, dc) {
 		try {
 			await skill.check.roll({
 				dc: { value: dc },
-				// PF2e calls this with the evaluated CheckRoll
 				callback: roll => {
+					// PF2e calls this with the evaluated CheckRoll
 					usedRoll = roll;
 				}
 			});
@@ -657,18 +951,54 @@ async function rollThieveryCheck(actor, dc) {
 	// If we got a roll from the callback, use it
 	if (usedRoll) {
 		const total = usedRoll.total ?? 0;
+
+		// Try to detect the d20 result for nat 20 / nat 1 logic
+		let d20 = null;
+		const dice = usedRoll.dice ?? [];
+		for (const term of dice) {
+			// Look for a d20 term
+			if (term.faces === 20 && Array.isArray(term.results) && term.results.length > 0) {
+				const r = term.results[0];
+				d20 = r.result ?? r.value ?? null;
+				break;
+			}
+		}
+
 		const diff = total - dc;
 
-		let degree;
-		if (diff >= 10) degree = "criticalSuccess";
-		else if (diff >= 0) degree = "success";
-		else if (diff <= -10) degree = "criticalFailure";
-		else degree = "failure";
+		// Base degree from diff only
+		// 0 = crit fail, 1 = fail, 2 = success, 3 = crit success
+		let degreeIndex;
+		if (diff >= 10) degreeIndex = 3;
+		else if (diff >= 0) degreeIndex = 2;
+		else if (diff <= -10) degreeIndex = 0;
+		else degreeIndex = 1;
 
-		return { roll: usedRoll, total, degree };
+		// Apply nat 20 / nat 1 upgrade/downgrade if we could find the d20
+		if (typeof d20 === "number") {
+			if (d20 === 20) {
+				// Upgrade one step, max crit success
+				degreeIndex = Math.min(3, degreeIndex + 1);
+			} else if (d20 === 1) {
+				// Downgrade one step, min crit failure
+				degreeIndex = Math.max(0, degreeIndex - 1);
+			}
+		}
+
+		let degree;
+		if (degreeIndex === 3) degree = "criticalSuccess";
+		else if (degreeIndex === 2) degree = "success";
+		else if (degreeIndex === 1) degree = "failure";
+		else degree = "criticalFailure";
+
+		return {
+			roll: usedRoll,
+			total,
+			degree
+		};
 	}
 
-	// Fallback: simple 1d20 + Thievery modifier if PF2e path fails
+	// Fallback: simple 1d20 + Thievery modifier if PF2e path fails completely
 	let mod = 0;
 	const fallbackSkill =
 		actor.system?.skills?.thi ??
@@ -683,17 +1013,155 @@ async function rollThieveryCheck(actor, dc) {
 	const total = roll.total ?? 0;
 	const diff = total - dc;
 
-	let degree;
-	if (diff >= 10) degree = "criticalSuccess";
-	else if (diff >= 0) degree = "success";
-	else if (diff <= -10) degree = "criticalFailure";
-	else degree = "failure";
+	let degreeIndex;
+	if (diff >= 10) degreeIndex = 3;
+	else if (diff >= 0) degreeIndex = 2;
+	else if (diff <= -10) degreeIndex = 0;
+	else degreeIndex = 1;
 
-	return { roll, total, degree };
+	// Try to pull d20 result from fallback as well
+	let d20 = null;
+	const dice = roll.dice ?? [];
+	for (const term of dice) {
+		if (term.faces === 20 && Array.isArray(term.results) && term.results.length > 0) {
+			const r = term.results[0];
+			d20 = r.result ?? r.value ?? null;
+			break;
+		}
+	}
+	if (typeof d20 === "number") {
+		if (d20 === 20) degreeIndex = Math.min(3, degreeIndex + 1);
+		else if (d20 === 1) degreeIndex = Math.max(0, degreeIndex - 1);
+	}
+
+	let degree;
+	if (degreeIndex === 3) degree = "criticalSuccess";
+	else if (degreeIndex === 2) degree = "success";
+	else if (degreeIndex === 1) degree = "failure";
+	else degree = "criticalFailure";
+
+	return {
+		roll,
+		total,
+		degree
+	};
 }
 
+
 //  GM Dialog: Start Lock-Pick Challenge
-async function startLockPickChallenge() {
+async function startLockPickChallenge(skipExistingCheck = false) {
+	if (!skipExistingCheck) {
+		const openChallenges = [];
+
+		for (const challenge of LockPickChallengeManager.challenges.values()) {
+			if (!challenge) continue;
+
+			// Only consider challenges created by this GM
+			if (challenge.gmId !== game.user.id) continue;
+
+			// Only consider challenges that aren't fully unlocked yet
+			if (challenge.successCount >= challenge.requiredAttempts) continue;
+
+			let actorName = "";
+			try {
+				const actor = await fromUuid(challenge.actorUuid);
+				actorName = actor?.name ?? `<${LT.missingActor()}>`;
+			} catch (err) {
+				actorName = `<${LT.missingActor()}>`;
+			}
+
+			const escapedName = foundry.utils.escapeHTML(actorName);
+			const label = `${escapedName} – DC ${challenge.dc}, ${challenge.successCount}/${challenge.requiredAttempts}`;
+
+			openChallenges.push({ challenge, label });
+		}
+
+		if (openChallenges.length > 0) {
+			let listItems = "";
+			for (const entry of openChallenges) {
+				listItems += `<li><strong>${entry.label}</strong></li>`;
+			}
+
+			let selectHtml = "";
+			if (openChallenges.length > 1) {
+				const options = openChallenges.map(entry =>
+					`<option value="${entry.challenge.id}">${entry.label}</option>`
+				).join("");
+				selectHtml = `
+					<div class="form-group">
+						<label>${LT.chooseExisting()}:</label>
+						<select name="challengeId">
+							${options}
+						</select>
+					</div>
+				`;
+			}
+
+			const html = `
+				<p>${LT.inProgress()}.</p>
+				<ul>
+					${listItems}
+				</ul>
+				${selectHtml}
+				<p>${LT.existingOrNew()}?</p>
+			`;
+
+			const dlg = new DialogV2({
+				window: {
+					title: LT.titleStartChallenge()
+				},
+				position: {
+					width: 600
+				},
+				content: html,
+				buttons: [
+					{
+						label: LT.openExisting(),
+						action: "open",
+						icon: "fa-solid fa-eye",
+						callback: async (event, button, dialog) => {
+							let chosen = null;
+
+							if (openChallenges.length === 1) {
+								chosen = openChallenges[0].challenge;
+							} else {
+								const form = button.form;
+								const challengeId = form.elements.challengeId?.value;
+								chosen = openChallenges.find(entry => entry.challenge.id === challengeId)?.challenge ?? null;
+							}
+
+							if (!chosen) {
+								debugLog("startLockPickChallenge – Open existing selected but no challenge resolved");
+								return;
+							}
+
+							// Make sure this client has the latest copy stored
+							LockPickChallengeManager.challenges.set(chosen.id, chosen);
+							LockPickChallengeApp.openForUsers(chosen);
+						}
+					},
+					{
+						label: LT.startNew(),
+						action: "startNew",
+						icon: "fa-solid fa-lock-open",
+						callback: async () => {
+							// Re-run without checking for existing challenges
+							await startLockPickChallenge(true);
+						}
+					},
+					{
+						label: LT.cancel(),
+						action: "cancel"
+					}
+				],
+				default: "open"
+			});
+
+			dlg.render(true);
+			return;
+		}
+	}
+
 	const actors = game.actors.contents.filter(a => a.hasPlayerOwner);
 	let defaultActor = null;
 
@@ -710,24 +1178,24 @@ async function startLockPickChallenge() {
 
 	const html = `
 		<div class="form-group">
-			<label>Character</label>
+			<label>${LT.character()}</label>
 			<select name="actorUuid">
 				${actorOptions}
 			</select>
 		</div>
 		<div class="form-group">
-			<label>Lock DC</label>
+			<label>${LT.lockDC()}</label>
 			<input type="number" name="dc" min="0" value="20" />
 		</div>
 		<div class="form-group">
-			<label>Required Successes (2–6)</label>
+			<label>${LT.reqSuccessesNum()}</label>
 			<input type="number" name="requiredAttempts" min="2" max="6" value="2" />
 		</div>
 	`;
 
 	const dlg = new DialogV2({
 		window: {
-			title: "Start Lock-Pick Challenge"
+			title: LT.titleStartChallenge()
 		},
 		position: {
 			width: 600
@@ -735,7 +1203,7 @@ async function startLockPickChallenge() {
 		content: html,
 		buttons: [
 			{
-                label: "Start",
+                label: LT.start(),
                 action: "start",
                 icon: "fa-solid fa-lock-open",
                 callback: async (event, button, dialog) => {
@@ -801,7 +1269,7 @@ async function startLockPickChallenge() {
                 }
             },
 			{
-				label: "Cancel",
+				label: LT.cancel(),
 				action: "cancel"
 			}
 		],

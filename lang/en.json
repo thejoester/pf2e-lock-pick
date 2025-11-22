@@ -1,0 +1,42 @@
+{
+    "pf2e-lock-pick": {
+        "settings": {
+            "debuglevelName": "Debug Level",
+            "debugLevelHint": "Set the debug level for console logging from the PF2e Lock-Pick module.",
+            "debugLevelNone": "None",
+            "debugLevelError": "Errors",
+            "debugLevelWarn": "Warnings",
+            "debugLevelAll": "All"
+        },
+        "titleLPC": "Lock-Pick Challenge",
+        "missingActor": "Missing Actor",
+        "DC": "DC",
+        "lockDC": "Lock DC",
+        "reqSuccesses": "Required Successes",
+        "close": "Close",
+        "pickLock": "Pick Lock",
+        "character": "Character",
+        "successes": "Successes",
+        "remainingPicks": "Remaining Picks",
+        "toolkit": "Toolkit",
+        "successLockPick": "successfully picks the lock",
+        "result": "Result",
+        "criticalSuccess": "Critical Success",
+		"success": "Success",
+		"failure": "Failure",
+		"criticalFailure": "Critical Failure",
+        "attemptLockPick": "attempts to pick the lock",
+        "lockPickDestroyed": "Lock pick destroyed",
+        "reqSuccessesNum": "Required Successes (2–6)",
+        "titleStartChallenge": "Start Lock-Pick Challenge",
+        "start": "Start",
+        "cancel": "Cancel",
+        "showToPlayer": "Show to player",
+        "restorePickToolkit": "Restore Pick/Toolkit",
+        "chooseExisting": "Choose an existing challenge",
+        "inProgress": "There is already an active Lock-Pick challenge in progress",
+        "existingOrNew": "Do you want to reopen an existing challenge or start a new one",
+        "openExisting": "Open existing",
+        "startNew": "Start new"
+    }
+}

@@ -35,6 +35,14 @@
   "changelog": "https://github.com/thejoester/pf2e-lock-pick/blob/main/CHANGELOG.md",
   "socket": true,
   "esmodules": [
-    "scripts/main.js"
-  ]
+    "scripts/main.js",
+    "scripts/localization.js"
+  ],
+   "languages": [
+        {
+            "lang": "en",
+            "name": "English",
+            "path": "lang/en.json"
+        }
+    ]
 }
