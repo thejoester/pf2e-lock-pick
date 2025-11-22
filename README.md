@@ -67,6 +67,6 @@ Send me a request to add you as a translator on GitLocalize with your username.
 
 ## Install 
 While this module is in testing phase, you can install it using the manifest URL: 
-`https://github.com/thejoester/pf2e-lock-pick/releases/latest/download/module.json`
+`https://github.com/thejoester/pf2e-lock-pick/releases/download/1.0.1/module.json`
 
 Once I am ready for release I will add it to the foundry module list. 
