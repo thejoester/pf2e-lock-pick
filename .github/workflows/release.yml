@@ -67,6 +67,8 @@ jobs:
           allowUpdates: true
           draft: ${{ github.event.release.draft }}
           prerelease: ${{ github.event.release.prerelease }}
+          # New line:
+          makeLatest: ${{ github.event.release.prerelease && 'false' || 'true' }}
           name: ${{ steps.get_version.outputs.version-without-v }}
           body: ${{ steps.changelog.outputs.release-notes }}
           artifacts: "module.json, dist/pf2e-lock-pick.zip"
